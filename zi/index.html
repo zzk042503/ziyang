@@ -152,10 +152,10 @@
 
   .products{background:var(--card);}
   
-  .view-section { display: none; opacity: 0; transform: translateY(15px); }
-  .view-section.active { display: block; animation: viewFadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+  .view-section { display: none; opacity: 0; }
+  .view-section.active { display: block; animation: viewFadeIn 0.5s ease forwards; }
   @keyframes viewFadeIn {
-    0% { opacity: 0; transform: translateY(15px); }
+    0% { opacity: 0; transform: translateY(10px); }
     100% { opacity: 1; transform: translateY(0); }
   }
 
@@ -165,7 +165,7 @@
     background:var(--bone); border:1px solid rgba(156,124,140,.2);
     border-radius: 4px; overflow: hidden;
     transition: box-shadow 0.5s ease, transform 0.5s ease, border-color 0.5s ease;
-    display: flex; flex-direction: column; height: 100%; 
+    display: flex; flex-direction: column; height: 100%; min-height: 300px;
   }
   .product-card:hover {
     box-shadow: 0 18px 36px rgba(107,85,96,.12); transform: translateY(-5px); border-color: rgba(156,124,140,.4);
@@ -215,7 +215,7 @@
   .detail-image img {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
     object-fit: cover; display: block; z-index: 2;
-    opacity: 0; transition: opacity 0.6s ease, transform 0.8s ease;
+    opacity: 0; transition: opacity 0.5s ease;
   }
   .product-card:hover .product-image img { transform: scale(1.06); }
   .product-image img.loaded, 
@@ -227,8 +227,11 @@
   }
   .placeholder-content .icon-loop { width:56px;height:34px;color:var(--mauve);opacity:.7; }
   .detail-image .placeholder-content .icon-loop { width:78px;height:48px; }
-  .placeholder-content span { font-size:11px;color:var(--plumgrey); }
+  .placeholder-content span { font-size:11px;color:var(--plumgrey); text-align: center; padding: 0 10px; }
   .detail-image .placeholder-content span { font-size:13px; }
+
+  /* 错误状态的特殊样式 */
+  .ph-error { color: #A05252 !important; font-weight: 600; }
 
   .story .container{display:grid;grid-template-columns:1fr 1fr;gap:72px;align-items:center;}
   .story-text p{margin-bottom:18px;color:var(--plumgrey);font-size:15px;}
@@ -331,7 +334,7 @@
     </div>
   </section>
 
-  <section class="products" id="products" aria-label="products" data-reveal>
+  <section class="products" id="products" aria-label="products">
     <div class="container">
       <div id="productListView" class="view-section active">
         <p class="section-eyebrow latin-caps center">Best knitwear</p>
@@ -344,9 +347,9 @@
         <div class="detail-layout">
           <div class="detail-media">
             <div class="detail-image">
-              <div class="placeholder-content">
+              <div class="placeholder-content" id="detailPlaceholderNode">
                 <svg class="icon-loop" viewBox="0 0 120 70" aria-hidden="true"><ellipse cx="46" cy="35" rx="34" ry="24" transform="rotate(-18 46 35)" fill="none" stroke="currentColor" stroke-width="3"/><ellipse cx="76" cy="35" rx="34" ry="24" transform="rotate(18 76 35)" fill="none" stroke="currentColor" stroke-width="2.4" opacity=".75"/></svg>
-                <span data-i18n="imagePlaceholder">图片加载中...</span>
+                <span data-i18n="imagePlaceholder" class="ph-text">图片加载中...</span>
               </div>
               <img id="detailImgNode" src="" alt="" style="display:none;">
             </div>
@@ -683,9 +686,12 @@ function renderProductGrid(){
     var p = products[i];
     var tone = 't' + (i % 4);
     
-    var imageHtml = '<div class="placeholder-content">' + loopIconSvg + '</div>';
+    // 防崩溃机制：图片加上 onerror 监听，如果失败自动显示文字提示
+    var imageHtml = '<div class="placeholder-content">' + loopIconSvg + '<span class="ph-text"></span></div>';
     if(p.image) {
-      imageHtml += '<img src="' + p.image + '" alt="' + p.name[currentLang] + '" loading="lazy" onload="this.classList.add(\'loaded\')">';
+      imageHtml += '<img src="' + p.image + '" alt="' + p.name[currentLang] + '" loading="lazy" ' +
+                   'onload="this.classList.add(\'loaded\'); this.previousElementSibling.style.display=\'none\';" ' +
+                   'onerror="this.previousElementSibling.querySelector(\'.ph-text\').classList.add(\'ph-error\'); this.previousElementSibling.querySelector(\'.ph-text\').textContent=\'图片路径错误\';">';
     }
 
     html += '<article class="product-card"><div class="product-image ' + tone + '">' + imageHtml + '</div><div class="product-body"><h3>' + p.name[currentLang] + '</h3><p class="product-price">' + formatPrice(p.price) + '</p><button class="btn btn-outline btn-sm" onclick="openDetail(' + p.id + ')">' + t('viewDetails') + '</button></div></article>';
@@ -718,36 +724,60 @@ function renderDetail(id){
   }
   
   var imgNode = document.getElementById('detailImgNode');
+  var placeholderNode = document.getElementById('detailPlaceholderNode');
   
   if (galleryImages.length > 0) {
     imgNode.classList.remove('loaded'); 
     imgNode.alt = p.name[currentLang];
     imgNode.style.display = 'block'; 
+    placeholderNode.style.display = 'flex';
+    placeholderNode.querySelector('.ph-text').textContent = '图片加载中...';
+    placeholderNode.querySelector('.ph-text').classList.remove('ph-error');
     
     imgNode.onload = function() {
       this.classList.add('loaded');
+      placeholderNode.style.display = 'none';
     };
-    imgNode.src = galleryImages[0];
+    imgNode.onerror = function() {
+      this.style.display = 'none';
+      placeholderNode.style.display = 'flex';
+      placeholderNode.querySelector('.ph-text').classList.add('ph-error');
+      placeholderNode.querySelector('.ph-text').textContent = '图片未找到 (检查大小写)';
+    };
     
-    if (imgNode.complete) {
-      imgNode.classList.add('loaded');
-    }
+    imgNode.src = galleryImages[0];
+    if (imgNode.complete) { imgNode.classList.add('loaded'); placeholderNode.style.display = 'none'; }
   } else {
     imgNode.src = '';
     imgNode.style.display = 'none'; 
+    placeholderNode.style.display = 'flex'; 
   }
 }
 
 function swapDetailImage(thumbnailElem, src) {
   var imgNode = document.getElementById('detailImgNode');
+  var placeholderNode = document.getElementById('detailPlaceholderNode');
   
   imgNode.classList.remove('loaded');
+  placeholderNode.style.display = 'flex';
+  placeholderNode.querySelector('.ph-text').textContent = '图片加载中...';
+  placeholderNode.querySelector('.ph-text').classList.remove('ph-error');
   
   setTimeout(function(){
-    imgNode.onload = function() { this.classList.add('loaded'); };
+    imgNode.onload = function() { 
+      this.classList.add('loaded'); 
+      placeholderNode.style.display = 'none'; 
+    };
+    imgNode.onerror = function() {
+      this.style.display = 'none';
+      placeholderNode.style.display = 'flex';
+      placeholderNode.querySelector('.ph-text').classList.add('ph-error');
+      placeholderNode.querySelector('.ph-text').textContent = '图片未找到 (检查大小写)';
+    };
+    imgNode.style.display = 'block';
     imgNode.src = src;
-    if (imgNode.complete) { imgNode.classList.add('loaded'); }
-  }, 100); 
+    if (imgNode.complete) { imgNode.classList.add('loaded'); placeholderNode.style.display = 'none'; }
+  }, 50); 
   
   var siblings = document.getElementById('detailGalleryNode').getElementsByTagName('img');
   for(var i=0; i<siblings.length; i++){ siblings[i].classList.remove('active'); }
